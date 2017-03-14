@@ -122,6 +122,42 @@ public class ApiServer {
             return gson.toJson(new BArrayWrapper(issues));
         });
 
+        get("/scanreport/:url", (request, response) -> {
+            String format = "HTML";
+            byte[] encodedBytes = Base64.decodeBase64(request.params("url"));
+            IScanIssue[] issues =  callbacks.getScanIssues(new String(encodedBytes));
+            File file;
+
+            try {
+                file = File.createTempFile(UUID.randomUUID().toString(), "ScanReport");
+            } catch (IOException e) {
+                response.status(500);
+                return "{\"Error creating file\": \"" + e.getMessage() + "\"}";
+            }
+
+            callbacks.generateScanReport(format, issues, file);
+            response.type("application/octet-stream");
+            response.header("Content-Disposition", "attachment; filename=ScanReport.HTML");
+
+            try {
+                DataInputStream inputStream = new DataInputStream(new FileInputStream(file.getPath()));
+                DataOutputStream outStream = new DataOutputStream(response.raw().getOutputStream());
+                byte[] buf = new byte[inputStream.available()];
+                inputStream.readFully(buf);
+                outStream.write(buf);
+                inputStream.close();
+                outStream.close();
+
+            } catch (IOException e) {
+                response.status(500);
+                return "{\"Error reading file\": \"" + e.getMessage() + "\"}";
+            } finally {
+                file.deleteOnExit();
+            }
+            response.status(200);
+            return "";
+        });
+
         post("/scanissues", (request, response) -> {
             BScanIssue issue = gson.fromJson(request.body(), BScanIssue.class);
             callbacks.addScanIssue(issue);
